@@ -124,6 +124,30 @@ func copyDir(src, dst string, srcInfo os.FileInfo) error {
 	return nil
 }
 
+func isSubDirectory(sourcePath, destinationPath string) (bool, error) {
+	sourceAbsolutePath, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return false, err
+	}
+
+	destinationAbsolutePath, err := filepath.Abs(destinationPath)
+	if err != nil {
+		return false, err
+	}
+
+	resolvedSourcePath, err := filepath.EvalSymlinks(sourceAbsolutePath)
+	if err != nil {
+		return false, err
+	}
+
+	relativePath, err := filepath.Rel(resolvedSourcePath, destinationAbsolutePath)
+	if err != nil {
+		return false, err
+	}
+
+	return !strings.HasPrefix(relativePath, "..") && relativePath != ".", nil
+}
+
 // copyFile copies a single file
 func copyFile(src, dst string, srcInfo os.FileInfo) error {
 	srcFile, err := os.Open(src)

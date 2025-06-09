@@ -450,19 +450,29 @@ func (m *model) pasteItem() {
 			p.name = icon.Copy + icon.Space + filepath.Base(filePath)
 		}
 
-		errMessage := "cut item error"
-		if m.copyItems.cut && !isExternalDiskPath(filePath) {
-			err = moveElement(filePath, filepath.Join(panel.location, filepath.Base(filePath)))
-		} else {
-			// Todo : These error cases are hard to test. We have to somehow make the paste operations fail,
-			// which is time consuming and manual. We should test these with automated testcases
-			err = pasteDir(filePath, filepath.Join(panel.location, filepath.Base(filePath)), id, m)
-			if err != nil {
-				errMessage = "paste item error"
-			} else if m.copyItems.cut {
-				os.RemoveAll(filePath)
+		destinationPath := filepath.Join(panel.location, filepath.Base(filePath))
+		isAllowed, err := isPasteOperationAllowed(filePath, destinationPath)
+
+		var errMessage string
+		if err == nil && isAllowed {
+			if m.copyItems.cut && !isExternalDiskPath(filePath) {
+				err = moveElement(filePath, destinationPath)
+				errMessage = "cut item error"
+			} else {
+				// Todo : These error cases are hard to test. We have to somehow make the paste operations fail,
+				// which is time consuming and manual. We should test these with automated testcases
+				err = pasteDir(filePath, destinationPath, id, m)
+				if err != nil {
+					errMessage = "paste item error"
+				} else if m.copyItems.cut {
+					os.RemoveAll(filePath)
+				}
 			}
+		} else if err == nil {
+			err = errors.New("paste not allowed: destination is subdirectory of source")
+			errMessage = "invalid paste operation"
 		}
+
 		p = m.processBarModel.process[id]
 		if err != nil {
 			slog.Debug("model.pasteItem - paste failure", "error", err,
@@ -490,6 +500,24 @@ func (m *model) pasteItem() {
 	if m.copyItems.cut {
 		m.copyItems.reset(false)
 	}
+}
+
+func isPasteOperationAllowed(sourcePath, destinationPath string) (bool, error) {
+	isSamePartition, err := isSamePartition(sourcePath, destinationPath)
+	if err != nil {
+		return false, err
+	}
+
+	if isSamePartition {
+		isSubDirectory, err := isSubDirectory(sourcePath, destinationPath)
+		if err != nil {
+			return false, err
+		}
+
+		return !isSubDirectory, nil
+	}
+
+	return true, nil
 }
 
 // Extract compressed file
